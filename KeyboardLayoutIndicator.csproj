@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <AssemblyName>KeyboardLayoutIndicator</AssemblyName>
+    <RootNamespace>KeyboardLayoutIndicator</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
+    <Product>Keyboard Layout Indicator</Product>
+    <AssemblyTitle>Keyboard Layout Indicator</AssemblyTitle>
+    <Version>1.0.0</Version>
+  </PropertyGroup>
+
+</Project>
