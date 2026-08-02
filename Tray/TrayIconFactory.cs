@@ -1,48 +1,41 @@
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
+using System;
+using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Tray
 {
     /// <summary>
-    /// Рисует простую иконку "клавиатуры" для трея во время выполнения,
-    /// чтобы не требовался отдельный файл .ico.
+    /// Загружает иконку для значка в трее. Ничего не рисует во время
+    /// выполнения (в отличие от прежней версии на GDI+/System.Drawing) —
+    /// сама иконка "зашита" в exe компилятором через &lt;ApplicationIcon&gt;
+    /// (см. Resources/app.ico и .csproj). Достаём её через ExtractIconEx по
+    /// собственному пути exe — это не требует знания точного числового ID
+    /// ресурса (который тулчейн присваивает недокументированным образом),
+    /// в отличие от LoadImage(hInstance, id, ...).
     /// </summary>
     public static class TrayIconFactory
     {
-        public static Icon CreateIcon()
+        public static IntPtr LoadTrayIcon()
         {
-            using var bmp = new Bitmap(32, 32, PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.Clear(Color.Transparent);
+            string? exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+                return IntPtr.Zero;
 
-                using var bodyBrush = new SolidBrush(Color.FromArgb(255, 40, 120, 220));
-                using var bodyPath = RoundedRect(new Rectangle(2, 6, 28, 20), 5);
-                g.FillPath(bodyBrush, bodyPath);
+            var largeIcons = new IntPtr[1];
+            var smallIcons = new IntPtr[1];
 
-                using var pen = new Pen(Color.White, 2f);
-                g.DrawLine(pen, 7, 13, 11, 13);
-                g.DrawLine(pen, 14, 13, 18, 13);
-                g.DrawLine(pen, 21, 13, 25, 13);
-                g.DrawLine(pen, 7, 20, 25, 20);
-            }
+            uint extracted = NativeMethods.ExtractIconEx(exePath, 0, largeIcons, smallIcons, 1);
+            if (extracted == 0)
+                return IntPtr.Zero;
 
-            System.IntPtr hIcon = bmp.GetHicon();
-            return Icon.FromHandle(hIcon);
-        }
+            // Для трея нужен маленький вариант; если он почему-то не вернулся —
+            // используем большой. Второй (неиспользуемый) хендл сразу освобождаем,
+            // иначе он "утечёт" на весь срок жизни процесса.
+            bool useSmall = smallIcons[0] != IntPtr.Zero;
+            IntPtr used = useSmall ? smallIcons[0] : largeIcons[0];
+            IntPtr unused = useSmall ? largeIcons[0] : smallIcons[0];
+            if (unused != IntPtr.Zero) NativeMethods.DestroyIcon(unused);
 
-        private static GraphicsPath RoundedRect(Rectangle bounds, int radius)
-        {
-            int d = radius * 2;
-            var path = new GraphicsPath();
-            path.AddArc(bounds.X, bounds.Y, d, d, 180, 90);
-            path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90);
-            path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90);
-            path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
-            path.CloseFigure();
-            return path;
+            return used;
         }
     }
 }

@@ -1,5 +1,5 @@
 using System;
-using System.Drawing;
+using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Overlay
 {
@@ -9,7 +9,7 @@ namespace KeyboardLayoutIndicator.Overlay
     /// </summary>
     public static class AlphaBitmapBuilder
     {
-        public static byte[] BuildFill(int width, int height, Color color, double opacity)
+        public static byte[] BuildFill(int width, int height, RgbColor color, double opacity)
         {
             byte a = ClampAlpha(opacity);
             byte[] buffer = new byte[width * height * 4];
@@ -17,7 +17,7 @@ namespace KeyboardLayoutIndicator.Overlay
             return buffer;
         }
 
-        public static byte[] BuildBorder(int width, int height, int thickness, Color color, double opacity)
+        public static byte[] BuildBorder(int width, int height, int thickness, RgbColor color, double opacity)
         {
             byte a = ClampAlpha(opacity);
             byte[] buffer = new byte[width * height * 4]; // изначально всё прозрачно (нули)
@@ -45,7 +45,7 @@ namespace KeyboardLayoutIndicator.Overlay
         /// чтобы индикатор CapsLock не "стирал", а визуально комбинировался
         /// с уже показанным индикатором раскладки.
         /// </summary>
-        public static void BlendFillOver(byte[] buffer, int width, int height, Color color, double opacity)
+        public static void BlendFillOver(byte[] buffer, int width, int height, RgbColor color, double opacity)
         {
             byte a = ClampAlpha(opacity);
             BlendRowOver(buffer, width, 0, height, 0, width, color, a);
@@ -58,7 +58,7 @@ namespace KeyboardLayoutIndicator.Overlay
         /// (например, на толщину уже нарисованной рамки раскладки), чтобы обе
         /// рамки были видны одновременно, а не сливались в одну линию.
         /// </summary>
-        public static void BlendBorderOver(byte[] buffer, int width, int height, int thickness, Color color, double opacity, int inset = 0)
+        public static void BlendBorderOver(byte[] buffer, int width, int height, int thickness, RgbColor color, double opacity, int inset = 0)
         {
             byte a = ClampAlpha(opacity);
 
@@ -85,7 +85,7 @@ namespace KeyboardLayoutIndicator.Overlay
             }
         }
 
-        private static void BlendRowOver(byte[] buffer, int width, int yStart, int yEnd, int xStart, int xEnd, Color color, byte srcA)
+        private static void BlendRowOver(byte[] buffer, int width, int yStart, int yEnd, int xStart, int xEnd, RgbColor color, byte srcA)
         {
             byte srcPb = (byte)(color.B * srcA / 255);
             byte srcPg = (byte)(color.G * srcA / 255);
@@ -106,7 +106,7 @@ namespace KeyboardLayoutIndicator.Overlay
             }
         }
 
-        private static void FillAll(byte[] buffer, Color color, byte a)
+        private static void FillAll(byte[] buffer, RgbColor color, byte a)
         {
             byte pb = (byte)(color.B * a / 255);
             byte pg = (byte)(color.G * a / 255);
@@ -121,7 +121,7 @@ namespace KeyboardLayoutIndicator.Overlay
             }
         }
 
-        private static void FillRow(byte[] buffer, int width, int y, int xStart, int xEnd, Color color, byte a)
+        private static void FillRow(byte[] buffer, int width, int y, int xStart, int xEnd, RgbColor color, byte a)
         {
             int rowOffset = y * width * 4;
             byte pb = (byte)(color.B * a / 255);

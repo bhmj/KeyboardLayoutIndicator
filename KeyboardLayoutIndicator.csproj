@@ -2,14 +2,14 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <AssemblyName>KeyboardLayoutIndicator</AssemblyName>
     <RootNamespace>KeyboardLayoutIndicator</RootNamespace>
-    <InvariantGlobalization>false</InvariantGlobalization>
+    <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>Keyboard Layout Indicator</Product>
     <AssemblyTitle>Keyboard Layout Indicator</AssemblyTitle>

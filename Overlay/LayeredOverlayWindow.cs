@@ -1,7 +1,5 @@
 using System;
-using System.Drawing;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
 using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Overlay
@@ -10,45 +8,67 @@ namespace KeyboardLayoutIndicator.Overlay
     /// Полупрозрачное окно без рамки, всегда поверх всех окон, прозрачное для
     /// кликов и не перехватывающее фокус — используется для рамки/заливки-индикатора.
     /// Рисуется через UpdateLayeredWindow, чтобы иметь честный per-pixel альфа-канал.
+    /// Это обычное Win32-окно (без System.Windows.Forms.Form), созданное напрямую
+    /// через CreateWindowEx, чтобы не тянуть в бинарник WinForms.
     /// </summary>
-    public sealed class LayeredOverlayWindow : Form
+    public sealed class LayeredOverlayWindow : IDisposable
     {
+        private const string ClassName = "KLI_OverlayWindowClass";
+        private const int SW_HIDE = 0;
+        private const int SW_SHOWNOACTIVATE = 4;
+
+        // Делегат WndProc хранится статически, чтобы GC не собрал его, пока
+        // класс окна зарегистрирован в системе (регистрация на весь процесс).
+        private static readonly NativeMethods.WndProc s_wndProc = WndProc;
+        private static bool s_classRegistered;
+
+        private readonly IntPtr _hwnd;
+
         public LayeredOverlayWindow()
         {
-            FormBorderStyle = FormBorderStyle.None;
-            ShowInTaskbar = false;
-            StartPosition = FormStartPosition.Manual;
-            TopMost = true;
-            Bounds = new Rectangle(0, 0, 1, 1);
+            EnsureClassRegistered();
+
+            IntPtr hInstance = NativeMethods.GetModuleHandle(null);
+
+            _hwnd = NativeMethods.CreateWindowEx(
+                NativeMethods.WS_EX_LAYERED | NativeMethods.WS_EX_TRANSPARENT |
+                NativeMethods.WS_EX_TOOLWINDOW | NativeMethods.WS_EX_NOACTIVATE | NativeMethods.WS_EX_TOPMOST,
+                ClassName, string.Empty, NativeMethods.WS_POPUP,
+                0, 0, 1, 1,
+                IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
         }
 
-        protected override bool ShowWithoutActivation => true;
-
-        protected override CreateParams CreateParams
+        private static void EnsureClassRegistered()
         {
-            get
+            if (s_classRegistered) return;
+
+            var wc = new NativeMethods.WNDCLASSEX
             {
-                var cp = base.CreateParams;
-                cp.ExStyle |= NativeMethods.WS_EX_LAYERED
-                             | NativeMethods.WS_EX_TRANSPARENT
-                             | NativeMethods.WS_EX_TOOLWINDOW
-                             | NativeMethods.WS_EX_NOACTIVATE;
-                return cp;
-            }
+                cbSize = (uint)Marshal.SizeOf<NativeMethods.WNDCLASSEX>(),
+                style = 0,
+                lpfnWndProc = s_wndProc,
+                hInstance = NativeMethods.GetModuleHandle(null),
+                hCursor = NativeMethods.LoadCursor(IntPtr.Zero, NativeMethods.IDC_ARROW),
+                hbrBackground = IntPtr.Zero,
+                lpszClassName = ClassName
+            };
+
+            NativeMethods.RegisterClassEx(ref wc);
+            s_classRegistered = true;
         }
+
+        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+            => NativeMethods.DefWindowProc(hWnd, msg, wParam, lParam);
 
         /// <summary>
         /// Задаёт содержимое окна: буфер BGRA (предумноженная альфа, top-down)
         /// и его положение/размер на экране (в пикселях виртуального экрана).
+        /// UpdateLayeredWindow сам обновляет и положение/размер окна на экране,
+        /// отдельно двигать/масштабировать его не нужно.
         /// </summary>
-        public void SetPixels(byte[] bgraPremultiplied, Rectangle bounds)
+        public void SetPixels(byte[] bgraPremultiplied, RectI bounds)
         {
-            if (!IsHandleCreated)
-            {
-                _ = Handle; // форсируем создание хэндла без показа окна
-            }
-
-            Bounds = bounds;
+            if (_hwnd == IntPtr.Zero) return;
 
             IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
             IntPtr memDc = IntPtr.Zero;
@@ -92,7 +112,7 @@ namespace KeyboardLayoutIndicator.Overlay
                 };
 
                 NativeMethods.UpdateLayeredWindow(
-                    Handle, screenDc, ref dstPos, ref size,
+                    _hwnd, screenDc, ref dstPos, ref size,
                     memDc, ref srcPos, 0, ref blend, NativeMethods.ULW_ALPHA);
             }
             finally
@@ -106,12 +126,22 @@ namespace KeyboardLayoutIndicator.Overlay
 
         public void ShowOverlay()
         {
-            if (!Visible) Show();
+            if (_hwnd == IntPtr.Zero) return;
+            if (!NativeMethods.IsWindowVisible(_hwnd))
+                NativeMethods.ShowWindow(_hwnd, SW_SHOWNOACTIVATE);
         }
 
         public void HideOverlay()
         {
-            if (Visible) Hide();
+            if (_hwnd == IntPtr.Zero) return;
+            if (NativeMethods.IsWindowVisible(_hwnd))
+                NativeMethods.ShowWindow(_hwnd, SW_HIDE);
+        }
+
+        public void Dispose()
+        {
+            if (_hwnd != IntPtr.Zero)
+                NativeMethods.DestroyWindow(_hwnd);
         }
     }
 }

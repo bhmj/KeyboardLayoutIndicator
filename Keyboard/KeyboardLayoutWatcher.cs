@@ -1,5 +1,5 @@
 using System;
-using System.Globalization;
+using System.Text;
 using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Keyboard
@@ -9,27 +9,17 @@ namespace KeyboardLayoutIndicator.Keyboard
     /// </summary>
     public sealed class KeyboardLayoutWatcher
     {
-        /// <summary>
-        /// Возвращает имя культуры, соответствующее текущей раскладке активного окна,
-        /// например "en-US" или "ru-RU".
-        /// </summary>
         public string GetCurrentLayoutName()
         {
             IntPtr hwnd = NativeMethods.GetForegroundWindow();
             uint threadId = NativeMethods.GetWindowThreadProcessId(hwnd, out _);
             IntPtr hkl = NativeMethods.GetKeyboardLayout(threadId);
 
-            int langId = unchecked((int)((long)hkl & 0xFFFF));
+            uint lcid = unchecked((uint)((long)hkl & 0xFFFF));
 
-            try
-            {
-                var culture = CultureInfo.GetCultureInfo(langId);
-                return culture.Name;
-            }
-            catch
-            {
-                return "unknown";
-            }
+            var sb = new StringBuilder(85); // LOCALE_NAME_MAX_LENGTH
+            int len = NativeMethods.LCIDToLocaleName(lcid, sb, sb.Capacity, 0);
+            return len > 0 ? sb.ToString() : "unknown";
         }
     }
 }

@@ -1,8 +1,9 @@
 using System;
 using System.Diagnostics;
 using System.IO;
-using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using KeyboardLayoutIndicator.Fullscreen;
+using KeyboardLayoutIndicator.Interop;
 using KeyboardLayoutIndicator.Keyboard;
 using KeyboardLayoutIndicator.Overlay;
 using KeyboardLayoutIndicator.Settings;
@@ -11,84 +12,164 @@ using KeyboardLayoutIndicator.Tray;
 
 namespace KeyboardLayoutIndicator
 {
-    /// <summary>
-    /// Контекст приложения без главного окна: значок в трее + вся логика
-    /// отслеживания раскладки, показа индикатора и звука щелчков.
-    /// </summary>
-    public sealed class TrayAppContext : ApplicationContext
+    public sealed class TrayAppContext : IDisposable
     {
-        private readonly NotifyIcon _trayIcon;
+        private const string ClassName = "KLI_MainWindowClass";
+
+        // Идентификаторы таймеров (SetTimer/WM_TIMER) и пунктов меню (WM_COMMAND).
+        private static readonly IntPtr PollTimerId = (IntPtr)1;
+        private static readonly IntPtr WarmupTimerId = (IntPtr)2;
+        private const int CmdOpenSettings = 1;
+        private const int CmdExit = 2;
+
+        private const uint WarmupIntervalMs = 3000;
+
+        private const int WM_SETTINGS_RELOADED = NativeMethods.WM_APP + 2;
+
+        private static readonly NativeMethods.WndProc s_wndProc = WndProc;
+        private static TrayAppContext? s_instance;
+
+        private readonly IntPtr _hwnd;
+        private readonly IntPtr _trayIconHandle;
+
         private readonly SettingsManager _settings;
         private readonly KeyboardLayoutWatcher _layoutWatcher = new();
         private readonly LowLevelKeyboardHook _hook = new();
         private readonly OverlayManager _overlay = new();
         private readonly ClickSoundPlayer _sounds = new();
-        private readonly System.Windows.Forms.Timer _pollTimer;
-        private readonly System.Windows.Forms.Timer _warmupTimer;
-
-        // Скрытый control используется только для маршалинга вызовов с фоновых
-        // потоков (FileSystemWatcher) на поток интерфейса.
-        private readonly Control _uiMarshal = new();
 
         private string _currentLayout = "";
         private bool _fullscreenActive;
         private bool _capsLockOn;
-
-        // Держим "прогрев" звукового устройства заметно чаще, чем интервал
-        // тишины (5-6 сек), после которого пропадает первый щелчок.
-        private const int WarmupIntervalMs = 3000;
+        private bool _disposed;
 
         public TrayAppContext()
         {
-            _uiMarshal.CreateControl();
+            s_instance = this;
 
             string settingsPath = Path.Combine(AppContext.BaseDirectory, "settings.yaml");
             _settings = new SettingsManager(settingsPath);
-            _settings.SettingsReloaded += () => SafeInvoke(OnSettingsReloaded);
+            _settings.SettingsReloaded += () => NativeMethods.PostMessage(_hwnd, WM_SETTINGS_RELOADED, IntPtr.Zero, IntPtr.Zero);
 
-            _trayIcon = new NotifyIcon
-            {
-                Icon = TrayIconFactory.CreateIcon(),
-                Visible = true,
-                Text = "Индикатор раскладки клавиатуры"
-            };
+            EnsureClassRegistered();
+            IntPtr hInstance = NativeMethods.GetModuleHandle(null);
+            _hwnd = NativeMethods.CreateWindowEx(
+                0, ClassName, string.Empty, NativeMethods.WS_OVERLAPPED,
+                0, 0, 0, 0,
+                IntPtr.Zero, IntPtr.Zero, hInstance, IntPtr.Zero);
 
-            var menu = new ContextMenuStrip();
-            menu.Items.Add("Открыть файл настроек", null, (_, __) => OpenSettingsInNotepad());
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Выход", null, (_, __) => ExitApp());
-            _trayIcon.ContextMenuStrip = menu;
-            _trayIcon.DoubleClick += (_, __) => OpenSettingsInNotepad();
+            _trayIconHandle = TrayIconFactory.LoadTrayIcon();
+            AddTrayIcon();
 
             _hook.KeyDown += OnGlobalKeyDown;
             _hook.Install();
 
-            _pollTimer = new System.Windows.Forms.Timer
-            {
-                Interval = ClampInterval(_settings.Options.PollIntervalMs)
-            };
-            _pollTimer.Tick += (_, __) => Tick();
-            _pollTimer.Start();
-
-            _warmupTimer = new System.Windows.Forms.Timer { Interval = WarmupIntervalMs };
-            _warmupTimer.Tick += (_, __) => { if (!_fullscreenActive) _sounds.Warmup(); };
-            _warmupTimer.Start();
+            NativeMethods.SetTimer(_hwnd, PollTimerId, (uint)ClampInterval(_settings.Options.PollIntervalMs), IntPtr.Zero);
+            NativeMethods.SetTimer(_hwnd, WarmupTimerId, WarmupIntervalMs, IntPtr.Zero);
 
             _capsLockOn = ReadCapsLockState();
             Tick();
         }
 
-        private void SafeInvoke(Action action)
+        private static void EnsureClassRegistered()
         {
-            try
+            var wc = new NativeMethods.WNDCLASSEX
             {
-                if (_uiMarshal.IsHandleCreated)
-                    _uiMarshal.BeginInvoke(action);
-            }
-            catch (ObjectDisposedException)
+                cbSize = (uint)Marshal.SizeOf<NativeMethods.WNDCLASSEX>(),
+                style = 0,
+                lpfnWndProc = s_wndProc,
+                hInstance = NativeMethods.GetModuleHandle(null),
+                lpszClassName = ClassName
+            };
+            NativeMethods.RegisterClassEx(ref wc);
+        }
+
+        private static IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        {
+            var self = s_instance;
+            if (self == null)
+                return NativeMethods.DefWindowProc(hWnd, msg, wParam, lParam);
+
+            switch (msg)
             {
-                // приложение уже завершает работу
+                case NativeMethods.WM_TIMER:
+                    if (wParam == PollTimerId) self.Tick();
+                    else if (wParam == WarmupTimerId && !self._fullscreenActive) self._sounds.Warmup();
+                    return IntPtr.Zero;
+
+                case NativeMethods.WM_TRAYICON:
+                    int mouseMsg = (int)(lParam.ToInt64() & 0xFFFF);
+                    if (mouseMsg == NativeMethods.WM_RBUTTONUP)
+                        self.ShowContextMenu();
+                    else if (mouseMsg == NativeMethods.WM_LBUTTONDBLCLK)
+                        self.OpenSettingsInNotepad();
+                    return IntPtr.Zero;
+
+                case NativeMethods.WM_COMMAND:
+                    int cmdId = (int)(wParam.ToInt64() & 0xFFFF);
+                    if (cmdId == CmdOpenSettings) self.OpenSettingsInNotepad();
+                    else if (cmdId == CmdExit) self.ExitApp();
+                    return IntPtr.Zero;
+
+                case WM_SETTINGS_RELOADED:
+                    self.OnSettingsReloaded();
+                    return IntPtr.Zero;
+
+                case NativeMethods.WM_DESTROY:
+                    NativeMethods.PostQuitMessage(0);
+                    return IntPtr.Zero;
+
+                default:
+                    return NativeMethods.DefWindowProc(hWnd, msg, wParam, lParam);
             }
+        }
+
+        /// <summary>Цикл сообщений — работает, пока не будет вызван PostQuitMessage (см. ExitApp/WM_DESTROY).</summary>
+        public void Run()
+        {
+            while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))
+            {
+                NativeMethods.TranslateMessage(ref msg);
+                NativeMethods.DispatchMessage(ref msg);
+            }
+        }
+
+        private void AddTrayIcon()
+        {
+            var data = BuildNotifyIconData();
+            data.uFlags = NativeMethods.NIF_MESSAGE | NativeMethods.NIF_ICON | NativeMethods.NIF_TIP;
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_ADD, ref data);
+        }
+
+        private NativeMethods.NOTIFYICONDATA BuildNotifyIconData() => new()
+        {
+            cbSize = Marshal.SizeOf<NativeMethods.NOTIFYICONDATA>(),
+            hWnd = _hwnd,
+            uID = 1,
+            uCallbackMessage = NativeMethods.WM_TRAYICON,
+            hIcon = _trayIconHandle,
+            szTip = "Индикатор раскладки клавиатуры",
+            // ByValTStr-поля не переносят null при маршалинге — явно задаём "".
+            szInfo = string.Empty,
+            szInfoTitle = string.Empty
+        };
+
+        private void ShowContextMenu()
+        {
+            NativeMethods.GetCursorPos(out var pt);
+
+            IntPtr hMenu = NativeMethods.CreatePopupMenu();
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdOpenSettings, "Открыть файл настроек");
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, IntPtr.Zero, string.Empty);
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdExit, "Выход");
+
+            // По правилам Win32 меню трея не закрывается само при клике мимо,
+            // если окно-владелец не активировано первым — стандартный обходной путь.
+            NativeMethods.SetForegroundWindow(_hwnd);
+            NativeMethods.TrackPopupMenuEx(hMenu, NativeMethods.TPM_RIGHTBUTTON, pt.X, pt.Y, _hwnd, IntPtr.Zero);
+            NativeMethods.PostMessage(_hwnd, 0, IntPtr.Zero, IntPtr.Zero);
+
+            NativeMethods.DestroyMenu(hMenu);
         }
 
         private void Tick()
@@ -108,7 +189,7 @@ namespace KeyboardLayoutIndicator
         }
 
         private static bool ReadCapsLockState()
-            => (Interop.NativeMethods.GetKeyState(Interop.NativeMethods.VK_CAPITAL) & 1) != 0;
+            => (NativeMethods.GetKeyState(NativeMethods.VK_CAPITAL) & 1) != 0;
 
         private void UpdateOverlay()
         {
@@ -131,7 +212,12 @@ namespace KeyboardLayoutIndicator
 
             // Текст подсказки трея ограничен 127 символами в Windows.
             string text = $"Раскладка: {_currentLayout} | {modeText} | звук: {(profile.Sound ? "вкл" : "выкл")}";
-            _trayIcon.Text = text.Length > 127 ? text.Substring(0, 127) : text;
+            if (text.Length > 127) text = text.Substring(0, 127);
+
+            var data = BuildNotifyIconData();
+            data.uFlags = NativeMethods.NIF_TIP;
+            data.szTip = text;
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_MODIFY, ref data);
         }
 
         private void OnGlobalKeyDown(uint vkCode)
@@ -139,7 +225,7 @@ namespace KeyboardLayoutIndicator
             // Обновляем индикацию CapsLock сразу по нажатию, не дожидаясь
             // следующего тика опроса (актуально, если poll-интервал увеличен
             // в настройках) — сама клавиша CapsLock тоже подпадает сюда.
-            if (vkCode == Interop.NativeMethods.VK_CAPITAL)
+            if (vkCode == NativeMethods.VK_CAPITAL)
             {
                 bool capsNow = ReadCapsLockState();
                 if (capsNow != _capsLockOn)
@@ -150,7 +236,7 @@ namespace KeyboardLayoutIndicator
             }
 
             if (_fullscreenActive) return;
-            if (!Keyboard.SymbolKeyClassifier.IsLayoutDependentKey(vkCode)) return;
+            if (!SymbolKeyClassifier.IsLayoutDependentKey(vkCode)) return;
 
             var profile = _settings.GetProfile(_currentLayout);
             if (profile.Sound)
@@ -159,7 +245,8 @@ namespace KeyboardLayoutIndicator
 
         private void OnSettingsReloaded()
         {
-            _pollTimer.Interval = ClampInterval(_settings.Options.PollIntervalMs);
+            NativeMethods.KillTimer(_hwnd, PollTimerId);
+            NativeMethods.SetTimer(_hwnd, PollTimerId, (uint)ClampInterval(_settings.Options.PollIntervalMs), IntPtr.Zero);
             UpdateTrayText();
             UpdateOverlay();
         }
@@ -178,24 +265,38 @@ namespace KeyboardLayoutIndicator
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
+                NativeMethods.MessageBox(
+                    _hwnd,
                     "Не удалось открыть файл настроек:\n" + ex.Message,
                     "Keyboard Layout Indicator",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error);
+                    NativeMethods.MB_OK | NativeMethods.MB_ICONERROR);
             }
         }
 
         private void ExitApp()
         {
-            _trayIcon.Visible = false;
-            _pollTimer.Stop();
-            _warmupTimer.Stop();
+            Dispose();
+        }
+
+        public void Dispose()
+        {
+            if (_disposed) return;
+            _disposed = true;
+
+            NativeMethods.KillTimer(_hwnd, PollTimerId);
+            NativeMethods.KillTimer(_hwnd, WarmupTimerId);
+
+            var data = BuildNotifyIconData();
+            NativeMethods.Shell_NotifyIcon(NativeMethods.NIM_DELETE, ref data);
+
             _hook.Dispose();
             _overlay.Dispose();
             _sounds.Dispose();
-            _trayIcon.Dispose();
-            Application.Exit();
+
+            if (_trayIconHandle != IntPtr.Zero)
+                NativeMethods.DestroyIcon(_trayIconHandle);
+
+            NativeMethods.DestroyWindow(_hwnd); // WM_DESTROY -> PostQuitMessage -> Run() завершится
         }
     }
 }

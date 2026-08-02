@@ -1,10 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Threading;
+using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Settings
 {
@@ -151,7 +151,7 @@ namespace KeyboardLayoutIndicator.Settings
             _ => OverlayMode.None
         };
 
-        private static Color ParseColor(string s)
+        private static RgbColor ParseColor(string s)
         {
             try
             {
@@ -161,17 +161,17 @@ namespace KeyboardLayoutIndicator.Settings
                     int r = int.Parse(parts[0].Trim(), CultureInfo.InvariantCulture);
                     int g = int.Parse(parts[1].Trim(), CultureInfo.InvariantCulture);
                     int b = int.Parse(parts[2].Trim(), CultureInfo.InvariantCulture);
-                    return Color.FromArgb(
-                        Math.Clamp(r, 0, 255),
-                        Math.Clamp(g, 0, 255),
-                        Math.Clamp(b, 0, 255));
+                    return new RgbColor(
+                        (byte)Math.Clamp(r, 0, 255),
+                        (byte)Math.Clamp(g, 0, 255),
+                        (byte)Math.Clamp(b, 0, 255));
                 }
             }
             catch
             {
                 // используем цвет по умолчанию
             }
-            return Color.Red;
+            return RgbColor.Red;
         }
 
         private static string GetString(Dictionary<string, string> d, string key, string def)

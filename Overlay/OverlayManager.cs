@@ -1,6 +1,5 @@
 using System;
-using System.Drawing;
-using System.Windows.Forms;
+using KeyboardLayoutIndicator.Interop;
 using KeyboardLayoutIndicator.Settings;
 
 namespace KeyboardLayoutIndicator.Overlay
@@ -36,13 +35,11 @@ namespace KeyboardLayoutIndicator.Overlay
             double layoutOpacity = profile.Mode == OverlayMode.Border ? options.BorderOpacity : options.OverlayOpacity;
             double capsOpacity = capsProfile.Mode == OverlayMode.Border ? options.BorderOpacity : options.OverlayOpacity;
 
-            Rectangle bounds = SystemInformation.VirtualScreen;
-            if (bounds.Width <= 0 || bounds.Height <= 0)
-                bounds = Screen.PrimaryScreen?.Bounds ?? new Rectangle(0, 0, 1920, 1080);
+            RectI bounds = GetVirtualScreenBounds();
 
             var key = new BufferKey(
-                profile.Mode, profile.Color.ToArgb(), profile.Thickness, layoutOpacity,
-                capsShown, capsProfile.Mode, capsProfile.Color.ToArgb(), capsProfile.Thickness, capsOpacity,
+                profile.Mode, profile.Color.ToArgbKey(), profile.Thickness, layoutOpacity,
+                capsShown, capsProfile.Mode, capsProfile.Color.ToArgbKey(), capsProfile.Thickness, capsOpacity,
                 bounds.Width, bounds.Height);
 
             _window ??= new LayeredOverlayWindow();
@@ -79,6 +76,19 @@ namespace KeyboardLayoutIndicator.Overlay
             }
 
             _window.ShowOverlay();
+        }
+
+        private static RectI GetVirtualScreenBounds()
+        {
+            int x = NativeMethods.GetSystemMetrics(NativeMethods.SM_XVIRTUALSCREEN);
+            int y = NativeMethods.GetSystemMetrics(NativeMethods.SM_YVIRTUALSCREEN);
+            int w = NativeMethods.GetSystemMetrics(NativeMethods.SM_CXVIRTUALSCREEN);
+            int h = NativeMethods.GetSystemMetrics(NativeMethods.SM_CYVIRTUALSCREEN);
+
+            if (w <= 0 || h <= 0)
+                return new RectI(0, 0, 1920, 1080); // разумный запасной вариант
+
+            return new RectI(x, y, w, h);
         }
 
         public void Hide()

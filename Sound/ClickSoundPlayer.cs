@@ -1,7 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Media;
+using System.Runtime.InteropServices;
+using KeyboardLayoutIndicator.Interop;
 using KeyboardLayoutIndicator.Settings;
 
 namespace KeyboardLayoutIndicator.Sound
@@ -10,22 +11,21 @@ namespace KeyboardLayoutIndicator.Sound
     /// Проигрывает короткий звук-щелчок при каждом нажатии клавиши, если это
     /// включено в профиле текущей раскладки. Поддерживает как встроенный
     /// сгенерированный звук, так и пользовательский .wav из настроек.
+    /// Использует winmm.dll напрямую (без System.Media.SoundPlayer/WinForms).
     /// </summary>
     public sealed class ClickSoundPlayer : IDisposable
     {
-        private readonly SoundPlayer _defaultPlayer;
-        private readonly SoundPlayer _keepAlivePlayer;
-        private readonly Dictionary<string, SoundPlayer> _customPlayers = new(StringComparer.OrdinalIgnoreCase);
+        // Встроенные звуки (щелчок и "прогрев") воспроизводятся асинхронно
+        // из памяти (SND_MEMORY|SND_ASYNC), поэтому их буферы должны быть
+        // закреплены в памяти (GCHandle, Pinned) на весь срок жизни плеера —
+        // Windows может ещё читать их уже после возврата из PlaySound().
+        private readonly GCHandle _clickHandle;
+        private readonly GCHandle _keepAliveHandle;
 
         public ClickSoundPlayer()
         {
-            byte[] wav = ClickSoundGenerator.GenerateClickWav();
-            _defaultPlayer = new SoundPlayer(new MemoryStream(wav));
-            try { _defaultPlayer.Load(); } catch { /* игнорируем, попробуем при Play() */ }
-
-            byte[] keepAliveWav = ClickSoundGenerator.GenerateSilentKeepAliveWav();
-            _keepAlivePlayer = new SoundPlayer(new MemoryStream(keepAliveWav));
-            try { _keepAlivePlayer.Load(); } catch { /* игнорируем, попробуем при Play() */ }
+            _clickHandle = GCHandle.Alloc(ClickSoundGenerator.GenerateClickWav(), GCHandleType.Pinned);
+            _keepAliveHandle = GCHandle.Alloc(ClickSoundGenerator.GenerateSilentKeepAliveWav(), GCHandleType.Pinned);
         }
 
         /// <summary>
@@ -36,7 +36,11 @@ namespace KeyboardLayoutIndicator.Sound
         /// </summary>
         public void Warmup()
         {
-            try { _keepAlivePlayer.Play(); }
+            try
+            {
+                NativeMethods.PlaySound(_keepAliveHandle.AddrOfPinnedObject(), IntPtr.Zero,
+                    NativeMethods.SND_MEMORY | NativeMethods.SND_ASYNC | NativeMethods.SND_NODEFAULT);
+            }
             catch { /* не критично, пропускаем один цикл прогрева */ }
         }
 
@@ -46,17 +50,15 @@ namespace KeyboardLayoutIndicator.Sound
             {
                 if (!string.IsNullOrWhiteSpace(profile.SoundFile) && File.Exists(profile.SoundFile))
                 {
-                    if (!_customPlayers.TryGetValue(profile.SoundFile, out var sp))
-                    {
-                        sp = new SoundPlayer(profile.SoundFile);
-                        try { sp.Load(); } catch { /* попробуем всё равно Play() */ }
-                        _customPlayers[profile.SoundFile] = sp;
-                    }
-                    sp.Play();
+                    // SND_FILENAME: winmm сам открывает и декодирует файл асинхронно,
+                    // управляемая память тут ни при чём — пиннинг не нужен.
+                    NativeMethods.PlaySound(profile.SoundFile, IntPtr.Zero,
+                        NativeMethods.SND_FILENAME | NativeMethods.SND_ASYNC | NativeMethods.SND_NODEFAULT);
                 }
                 else
                 {
-                    _defaultPlayer.Play();
+                    NativeMethods.PlaySound(_clickHandle.AddrOfPinnedObject(), IntPtr.Zero,
+                        NativeMethods.SND_MEMORY | NativeMethods.SND_ASYNC | NativeMethods.SND_NODEFAULT);
                 }
             }
             catch
@@ -67,11 +69,8 @@ namespace KeyboardLayoutIndicator.Sound
 
         public void Dispose()
         {
-            _defaultPlayer.Dispose();
-            _keepAlivePlayer.Dispose();
-            foreach (var sp in _customPlayers.Values)
-                sp.Dispose();
-            _customPlayers.Clear();
+            if (_clickHandle.IsAllocated) _clickHandle.Free();
+            if (_keepAliveHandle.IsAllocated) _keepAliveHandle.Free();
         }
     }
 }

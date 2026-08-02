@@ -1,4 +1,4 @@
-using System.Drawing;
+using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Settings
 {
@@ -12,7 +12,7 @@ namespace KeyboardLayoutIndicator.Settings
     {
         public bool Enabled { get; set; } = false;
         public OverlayMode Mode { get; set; } = OverlayMode.Border;
-        public Color Color { get; set; } = Color.White;
+        public RgbColor Color { get; set; } = RgbColor.White;
         public int Thickness { get; set; } = 6;
     }
 }

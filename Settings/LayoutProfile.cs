@@ -1,4 +1,4 @@
-using System.Drawing;
+using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Settings
 {
@@ -12,7 +12,7 @@ namespace KeyboardLayoutIndicator.Settings
     public sealed class LayoutProfile
     {
         public OverlayMode Mode { get; set; } = OverlayMode.None;
-        public Color Color { get; set; } = Color.Red;
+        public RgbColor Color { get; set; } = RgbColor.Red;
         public int Thickness { get; set; } = 12;
         public bool Sound { get; set; } = false;
         public string SoundFile { get; set; } = "";
