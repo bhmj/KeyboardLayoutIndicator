@@ -24,7 +24,7 @@
 Из папки проекта выполните (одной строкой):
 
 ```
-dotnet publish -c Release -r win-x64 -p:PublishAot=true -o publish
+dotnet publish -c Release -r win-x64 -o publish
 ```
 
 В `publish` появится `KeyboardLayoutIndicator.exe` размером порядка
@@ -35,6 +35,22 @@ dotnet publish -c Release -r win-x64 -p:PublishAot=true -o publish
 
 Также проект открывается и собирается напрямую в Visual Studio 2022
 (File → Open → Project/Solution → выбрать .csproj).
+
+## Релизы (GitHub)
+
+Готовый `KeyboardLayoutIndicator-win-x64.zip` с портативным `.exe` собирается
+автоматически при публикации релиза на GitHub:
+
+1. Смержить изменения в `main`.
+2. На GitHub: **Releases → Draft a new release**.
+3. Создать тег вида `v1.0.1`, указать описание изменений.
+4. Нажать **Publish release**.
+
+Workflow `.github/workflows/release.yml` соберёт бинарник на `windows-latest`
+и прикрепит архив к релизу. Черновики релиза сборку не запускают.
+
+На каждый push и pull request в `main` также запускается проверочная сборка
+(`.github/workflows/ci.yml`).
 
 ## Формат settings.yaml
 

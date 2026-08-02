@@ -1,0 +1,42 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $v = "${{ github.event.release.tag_name }}" -replace '^v',''
+          "VERSION=$v" >> $env:GITHUB_ENV
+
+      - name: Publish win-x64 (Native AOT)
+        run: >
+          dotnet publish KeyboardLayoutIndicator.csproj
+          -c Release
+          -r win-x64
+          -p:Version=${{ env.VERSION }}
+          -o publish
+
+      - name: Package release asset
+        shell: pwsh
+        run: Compress-Archive -Path publish/KeyboardLayoutIndicator.exe -DestinationPath KeyboardLayoutIndicator-win-x64.zip
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: KeyboardLayoutIndicator-win-x64.zip
