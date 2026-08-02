@@ -1,6 +1,5 @@
 namespace KeyboardLayoutIndicator.Interop
 {
-    /// <summary>Простой прямоугольник в пикселях — замена System.Drawing.Rectangle.</summary>
     public readonly struct RectI
     {
         public readonly int X;

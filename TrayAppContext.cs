@@ -16,7 +16,6 @@ namespace KeyboardLayoutIndicator
     {
         private const string ClassName = "KLI_MainWindowClass";
 
-        // Идентификаторы таймеров (SetTimer/WM_TIMER) и пунктов меню (WM_COMMAND).
         private static readonly IntPtr PollTimerId = (IntPtr)1;
         private static readonly IntPtr WarmupTimerId = (IntPtr)2;
         private const int CmdOpenSettings = 1;
@@ -124,7 +123,6 @@ namespace KeyboardLayoutIndicator
             }
         }
 
-        /// <summary>Цикл сообщений — работает, пока не будет вызван PostQuitMessage (см. ExitApp/WM_DESTROY).</summary>
         public void Run()
         {
             while (NativeMethods.GetMessage(out var msg, IntPtr.Zero, 0, 0))
@@ -148,10 +146,9 @@ namespace KeyboardLayoutIndicator
             uID = 1,
             uCallbackMessage = NativeMethods.WM_TRAYICON,
             hIcon = _trayIconHandle,
-            szTip = "Индикатор раскладки клавиатуры",
-            // ByValTStr-поля не переносят null при маршалинге — явно задаём "".
-            szInfo = string.Empty,
-            szInfoTitle = string.Empty
+            szTip = "Keyboard Layout Indicator",
+            szInfo = string.Empty,     // need for marshalling 
+            szInfoTitle = string.Empty // 
         };
 
         private void ShowContextMenu()
@@ -159,12 +156,11 @@ namespace KeyboardLayoutIndicator
             NativeMethods.GetCursorPos(out var pt);
 
             IntPtr hMenu = NativeMethods.CreatePopupMenu();
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdOpenSettings, "Открыть файл настроек");
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdOpenSettings, "Open settings");
             NativeMethods.AppendMenu(hMenu, NativeMethods.MF_SEPARATOR, IntPtr.Zero, string.Empty);
-            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdExit, "Выход");
+            NativeMethods.AppendMenu(hMenu, NativeMethods.MF_STRING, (IntPtr)CmdExit, "Quit");
 
-            // По правилам Win32 меню трея не закрывается само при клике мимо,
-            // если окно-владелец не активировано первым — стандартный обходной путь.
+            // Close menu on outside click: standard workaround
             NativeMethods.SetForegroundWindow(_hwnd);
             NativeMethods.TrackPopupMenuEx(hMenu, NativeMethods.TPM_RIGHTBUTTON, pt.X, pt.Y, _hwnd, IntPtr.Zero);
             NativeMethods.PostMessage(_hwnd, 0, IntPtr.Zero, IntPtr.Zero);
@@ -194,10 +190,12 @@ namespace KeyboardLayoutIndicator
         private void UpdateOverlay()
         {
             var profile = _settings.GetProfile(_currentLayout);
-            if (_fullscreenActive)
+            Console.WriteLine($"currentLayout: {_currentLayout}, profile.Mode: {profile.Mode}");
+            if (_fullscreenActive) {
                 _overlay.Hide();
-            else
+            } else {
                 _overlay.Apply(profile, _settings.Options, _settings.CapsLock, _capsLockOn);
+            }
         }
 
         private void UpdateTrayText()
@@ -205,13 +203,13 @@ namespace KeyboardLayoutIndicator
             var profile = _settings.GetProfile(_currentLayout);
             string modeText = profile.Mode switch
             {
-                OverlayMode.Border => "рамка",
-                OverlayMode.Overlay => "заливка",
-                _ => "нет индикатора"
+                OverlayMode.Border => "border",
+                OverlayMode.Overlay => "overlay",
+                _ => "none"
             };
 
             // Текст подсказки трея ограничен 127 символами в Windows.
-            string text = $"Раскладка: {_currentLayout} | {modeText} | звук: {(profile.Sound ? "вкл" : "выкл")}";
+            string text = $"Layout: {_currentLayout} | {modeText} | sound: {(profile.Sound ? "on" : "off")}";
             if (text.Length > 127) text = text.Substring(0, 127);
 
             var data = BuildNotifyIconData();
@@ -222,9 +220,6 @@ namespace KeyboardLayoutIndicator
 
         private void OnGlobalKeyDown(uint vkCode)
         {
-            // Обновляем индикацию CapsLock сразу по нажатию, не дожидаясь
-            // следующего тика опроса (актуально, если poll-интервал увеличен
-            // в настройках) — сама клавиша CapsLock тоже подпадает сюда.
             if (vkCode == NativeMethods.VK_CAPITAL)
             {
                 bool capsNow = ReadCapsLockState();
@@ -267,7 +262,7 @@ namespace KeyboardLayoutIndicator
             {
                 NativeMethods.MessageBox(
                     _hwnd,
-                    "Не удалось открыть файл настроек:\n" + ex.Message,
+                    "Could not open settings file:\n" + ex.Message,
                     "Keyboard Layout Indicator",
                     NativeMethods.MB_OK | NativeMethods.MB_ICONERROR);
             }
@@ -296,7 +291,7 @@ namespace KeyboardLayoutIndicator
             if (_trayIconHandle != IntPtr.Zero)
                 NativeMethods.DestroyIcon(_trayIconHandle);
 
-            NativeMethods.DestroyWindow(_hwnd); // WM_DESTROY -> PostQuitMessage -> Run() завершится
+            NativeMethods.DestroyWindow(_hwnd);
         }
     }
 }

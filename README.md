@@ -2,23 +2,22 @@
 
 [Русская версия](README.rus.md)
 
-A portable (no-install) Windows 10 app that:
+A portable Windows app that triggers screen color overlay to avoid input language ambiguity.
+
+How it works:
 
 - tracks the keyboard layout of the active window;
 - when the layout changes, shows a semi-transparent colored **border**
   of a configurable thickness/color or a full-screen **color overlay**
-  (or shows nothing) — the mode is set in `settings.yaml` separately for
-  each layout;
-- on each key press, plays a short click sound if enabled for the current
-  layout (also configured in `settings.yaml`);
+  or shows nothing — the mode is set in a config file separately for each layout;
+- on each key press, plays a short click sound if enabled for the current layout;
 - disables the border/overlay/sound while fullscreen apps (games) are running;
-- lives in the system tray with "Open settings file" (in Notepad) and "Exit"
-  menu items.
+- stays in the system tray;
 
 You can edit `settings.yaml` while the app is running — changes are picked
 up automatically after you save the file; no restart is required.
 
-## Build (portable app)
+## Build
 
 Requires **.NET 8 SDK** installed on Windows (must be built on Windows itself,
 since the project uses Win32 API via P/Invoke).
@@ -29,10 +28,10 @@ From the project folder, run:
 dotnet publish -c Release -r win-x64 -o publish
 ```
 
-The `publish` folder will contain `KeyboardLayoutIndicator.exe` (~**2–4 MB**)
-— copy it anywhere (USB drive, any folder) and run without installing .NET.
-`settings.yaml` is created next to the exe on first launch.
+The `publish` folder will contain `KeyboardLayoutIndicator.exe` (~**2.5 MB**)
+which requires no external dependencies.
 
+`settings.yaml` is created next to the exe on first launch.
 
 The project can also be opened and built directly in Visual Studio 2022
 (File → Open → Project/Solution → select the .csproj).
@@ -43,9 +42,9 @@ The project can also be opened and built directly in Visual Studio 2022
 en-US:
   mode: none          # none | border | overlay — nothing / border / full-screen tint
   color: "0,120,215"  # color as R,G,B
-  thickness: 12        # border thickness in pixels (for mode: border)
-  sound: false          # click sound on key presses in this layout
-  soundFile: ""         # optional: path to your own .wav instead of the built-in click
+  thickness: 12       # border thickness in pixels (for mode: border)
+  sound: false        # click sound on key presses in this layout
+  soundFile: ""       # optional: path to your own .wav instead of the built-in click
 
 ru-RU:
   mode: border
@@ -55,16 +54,16 @@ ru-RU:
   soundFile: ""
 
 options:
-  pollIntervalMs: 120       # how often to poll layout, ms
-  disableInFullscreen: true # disable indicator/sound in fullscreen apps
+  pollIntervalMs: 120        # how often to poll layout, ms
+  disableInFullscreen: true  # disable indicator/sound in fullscreen apps
   borderOpacity: 0.55        # border opacity, 0.0–1.0
   overlayOpacity: 0.12       # full-screen overlay opacity, 0.0–1.0
 
 capsLock:
-  enabled: false      # Caps Lock indicator, drawn on top of the layout indicator
-  mode: border        # none | border | overlay
+  enabled: false         # Caps Lock indicator, drawn on top of the layout indicator
+  mode: border           # none | border | overlay
   color: "255,255,255"
-  thickness: 6         # for mode: border; if the layout is also border, drawn inside it
+  thickness: 6           # for mode: border; if the layout is also border, drawn inside it
 ```
 
 Sound plays only for keys whose output depends on the layout (letters, the
@@ -75,6 +74,7 @@ de-DE, fr-FR, etc.).
 
 ## Known limitations
 
+- Fails to detect correct layout in console apps (cmd.exe, far.exe)
 - If a game/app is running **as administrator** but the indicator is not,
   the global keyboard hook will not see key presses in that app (Windows UIPI
   protection). In that case, run the indicator as administrator too.
