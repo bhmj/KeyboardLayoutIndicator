@@ -190,7 +190,6 @@ namespace KeyboardLayoutIndicator
         private void UpdateOverlay()
         {
             var profile = _settings.GetProfile(_currentLayout);
-            Console.WriteLine($"currentLayout: {_currentLayout}, profile.Mode: {profile.Mode}");
             if (_fullscreenActive) {
                 _overlay.Hide();
             } else {
