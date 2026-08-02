@@ -1,66 +1,51 @@
 # Keyboard Layout Indicator
 
-Портативная (без установки) программа для Windows 10, которая:
+[Русская версия](README.rus.md)
 
-- отслеживает текущую раскладку клавиатуры активного окна;
-- при переключении раскладки показывает поверх всех окон полупрозрачную
-  цветную **рамку** заданной толщины/цвета либо **цветовой фильтр** на весь
-  экран (или ничего не показывает) — режим задаётся в `settings.yaml`
-  отдельно для каждой раскладки;
-- при каждом нажатии клавиши воспроизводит короткий звук-щелчок, если это
-  включено для текущей раскладки (тоже настраивается в `settings.yaml`);
-- на время работы полноэкранных приложений (игр) отключает рамку/заливку/звук;
-- живёт в трее: меню "Открыть файл настроек" (в Блокноте) и "Выход".
+A portable (no-install) Windows 10 app that:
 
-Файл настроек `settings.yaml` можно редактировать прямо во время работы
-программы — изменения подхватываются автоматически после сохранения файла,
-перезапускать программу не нужно.
+- tracks the keyboard layout of the active window;
+- when the layout changes, shows a semi-transparent colored **border**
+  of a configurable thickness/color or a full-screen **color overlay**
+  (or shows nothing) — the mode is set in `settings.yaml` separately for
+  each layout;
+- on each key press, plays a short click sound if enabled for the current
+  layout (also configured in `settings.yaml`);
+- disables the border/overlay/sound while fullscreen apps (games) are running;
+- lives in the system tray with "Open settings file" (in Notepad) and "Exit"
+  menu items.
 
-## Сборка (портативный .exe, без установщика)
+You can edit `settings.yaml` while the app is running — changes are picked
+up automatically after you save the file; no restart is required.
 
-Нужен установленный **.NET 8 SDK** на Windows (собирается на самой Windows,
-т.к. проект использует Win32 API через P/Invoke).
+## Build (portable app)
 
-Из папки проекта выполните (одной строкой):
+Requires **.NET 8 SDK** installed on Windows (must be built on Windows itself,
+since the project uses Win32 API via P/Invoke).
+
+From the project folder, run:
 
 ```
 dotnet publish -c Release -r win-x64 -o publish
 ```
 
-В `publish` появится `KeyboardLayoutIndicator.exe` размером порядка
-**2-4 МБ** — можно копировать куда угодно (флешка, любая папка) и
-запускать без установки .NET. `settings.yaml` создастся рядом с exe
-при первом запуске.
+The `publish` folder will contain `KeyboardLayoutIndicator.exe` (~**2–4 MB**)
+— copy it anywhere (USB drive, any folder) and run without installing .NET.
+`settings.yaml` is created next to the exe on first launch.
 
 
-Также проект открывается и собирается напрямую в Visual Studio 2022
-(File → Open → Project/Solution → выбрать .csproj).
+The project can also be opened and built directly in Visual Studio 2022
+(File → Open → Project/Solution → select the .csproj).
 
-## Релизы (GitHub)
-
-Готовый `KeyboardLayoutIndicator-win-x64.zip` с портативным `.exe` собирается
-автоматически при публикации релиза на GitHub:
-
-1. Смержить изменения в `main`.
-2. На GitHub: **Releases → Draft a new release**.
-3. Создать тег вида `v1.0.1`, указать описание изменений.
-4. Нажать **Publish release**.
-
-Workflow `.github/workflows/release.yml` соберёт бинарник на `windows-latest`
-и прикрепит архив к релизу. Черновики релиза сборку не запускают.
-
-На каждый push и pull request в `main` также запускается проверочная сборка
-(`.github/workflows/ci.yml`).
-
-## Формат settings.yaml
+## settings.yaml format
 
 ```yaml
 en-US:
-  mode: none          # none | border | overlay — ничего / рамка / заливка
-  color: "0,120,215"  # цвет в формате R,G,B
-  thickness: 12        # толщина рамки в пикселях (для mode: border)
-  sound: false          # звук-щелчок при нажатии клавиш в этой раскладке
-  soundFile: ""         # необязательно: путь к своему .wav вместо встроенного щелчка
+  mode: none          # none | border | overlay — nothing / border / full-screen tint
+  color: "0,120,215"  # color as R,G,B
+  thickness: 12        # border thickness in pixels (for mode: border)
+  sound: false          # click sound on key presses in this layout
+  soundFile: ""         # optional: path to your own .wav instead of the built-in click
 
 ru-RU:
   mode: border
@@ -70,37 +55,35 @@ ru-RU:
   soundFile: ""
 
 options:
-  pollIntervalMs: 120       # как часто проверять раскладку, мс
-  disableInFullscreen: true # отключать индикатор/звук в полноэкранных приложениях
-  borderOpacity: 0.55        # прозрачность рамки, 0.0-1.0
-  overlayOpacity: 0.12       # прозрачность заливки на весь экран, 0.0-1.0
+  pollIntervalMs: 120       # how often to poll layout, ms
+  disableInFullscreen: true # disable indicator/sound in fullscreen apps
+  borderOpacity: 0.55        # border opacity, 0.0–1.0
+  overlayOpacity: 0.12       # full-screen overlay opacity, 0.0–1.0
 
 capsLock:
-  enabled: false      # индикатор CapsLock, накладывается поверх индикатора раскладки
+  enabled: false      # Caps Lock indicator, drawn on top of the layout indicator
   mode: border        # none | border | overlay
   color: "255,255,255"
-  thickness: 6         # для mode: border; если раскладка тоже border — рисуется внутри неё
+  thickness: 6         # for mode: border; if the layout is also border, drawn inside it
 ```
 
-Звук воспроизводится только при нажатии клавиш, значение которых зависит от
-раскладки (буквы, верхний цифровой ряд и соседняя пунктуация), нажатия других клавиш
-звук не издают.
+Sound plays only for keys whose output depends on the layout (letters, the
+top number row, and adjacent punctuation); other keys do not trigger sound.
 
-Имя раскладки это имя языка ввода Windows (en-US, ru-RU, uk-UA, de-DE, fr-FR и прочее).
+The layout name is the Windows input language name (en-US, ru-RU, uk-UA,
+de-DE, fr-FR, etc.).
 
-## Известные ограничения
+## Known limitations
 
-- Если игра/приложение запущено **от имени администратора**, а сам индикатор
-  — нет, глобальный хук клавиатуры не увидит нажатия в этом приложении
-  (защита UIPI в Windows). В этом случае запустите индикатор тоже от имени
-  администратора.
-- Определение "полноэкранности" — эвристика (сравнение размеров активного
-  окна с размерами монитора). В редких случаях специфичные окна без рамки
-  на весь экран могут не сразу распознаваться как игра.
-- Раскладка определяется по раскладке потока активного окна; для отдельных
-  приложений со своим IME это может отличаться от системного индикатора
-  языка в трее Windows.
-- Звук воспроизводится напрямую через `winmm.dll` (`PlaySound`, без внешних
-  зависимостей); при очень частом наборе короткие щелчки могут слегка
-  перекрываться друг с другом — это особенность выбранного простого
-  способа воспроизведения, а не ошибка.
+- If a game/app is running **as administrator** but the indicator is not,
+  the global keyboard hook will not see key presses in that app (Windows UIPI
+  protection). In that case, run the indicator as administrator too.
+- Fullscreen detection is heuristic (comparing the active window size to the
+  monitor size). In rare cases, borderless fullscreen windows may not be
+  recognized as a game immediately.
+- Layout is determined from the active window's thread layout; for apps with
+  their own IME, this may differ from the system language indicator in the
+  Windows tray.
+- Sound is played directly via `winmm.dll` (`PlaySound`, no external
+  dependencies); with very fast typing, short clicks may slightly overlap —
+  this is a characteristic of the chosen simple playback approach, not a bug.
