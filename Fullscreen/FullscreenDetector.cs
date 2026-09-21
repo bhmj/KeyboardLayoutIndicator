@@ -6,6 +6,11 @@ using KeyboardLayoutIndicator.Interop;
 
 namespace KeyboardLayoutIndicator.Fullscreen
 {
+    /// <summary>
+    /// Определяет, занимает ли активное окно весь экран монитора (типично для игр
+    /// в эксклюзивном или "оконном полноэкранном" режиме). Используется, чтобы
+    /// на время работы такого приложения отключать рамку/заливку/звук.
+    /// </summary>
     public static class FullscreenDetector
     {
         private static readonly HashSet<string> IgnoredClasses = new(StringComparer.OrdinalIgnoreCase)
@@ -46,6 +51,7 @@ namespace KeyboardLayoutIndicator.Fullscreen
 
             if (!coversMonitor) return false;
 
+            // Исключаем случаи, когда "во весь экран" развёрнут сам Проводник и т.п.
             try
             {
                 NativeMethods.GetWindowThreadProcessId(hwnd, out uint pid);
@@ -55,7 +61,7 @@ namespace KeyboardLayoutIndicator.Fullscreen
             }
             catch
             {
-                //
+                // если процесс не удалось открыть — не мешаем, считаем что это не explorer
             }
 
             return true;

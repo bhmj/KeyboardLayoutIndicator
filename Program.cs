@@ -9,6 +9,8 @@ namespace KeyboardLayoutIndicator
         [STAThread]
         private static void Main()
         {
+            // DPI awareness задаётся манифестом (app.manifest), отдельный вызов
+            // не нужен — раньше это делал Application.SetHighDpiMode из WinForms.
 
             // Не даём запустить второй экземпляр программы.
             using var mutex = new Mutex(true, "KeyboardLayoutIndicator_SingleInstance_9F3B2E11", out bool createdNew);

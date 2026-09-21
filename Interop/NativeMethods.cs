@@ -177,6 +177,13 @@ namespace KeyboardLayoutIndicator.Interop
             public IntPtr dwExtraInfo;
         }
 
+        // ==================================================================
+        // Ниже — минимальный набор Win32 API, заменяющий Windows Forms
+        // (окно, цикл сообщений, значок в трее, контекстное меню, таймеры,
+        // MessageBox), чтобы не тянуть в бинарник System.Windows.Forms /
+        // System.Drawing.Common и всё, что они тащат за собой.
+        // ==================================================================
+
         // ---- Окно и цикл сообщений ----
         public delegate IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
@@ -265,20 +272,30 @@ namespace KeyboardLayoutIndicator.Interop
         public static extern IntPtr LoadCursor(IntPtr hInstance, IntPtr lpCursorName);
         public static readonly IntPtr IDC_ARROW = new(32512);
 
-        // ---- Таймеры на основе цикла сообщений ----
+        // ---- Таймеры на основе цикла сообщений (без System.Windows.Forms.Timer) ----
         [DllImport("user32.dll")]
         public static extern IntPtr SetTimer(IntPtr hWnd, IntPtr nIDEvent, uint uElapse, IntPtr lpTimerFunc);
 
         [DllImport("user32.dll")]
         public static extern bool KillTimer(IntPtr hWnd, IntPtr uIDEvent);
 
-        // ---- MessageBox ----
+        // ---- MessageBox (замена System.Windows.Forms.MessageBox) ----
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
         public static extern int MessageBox(IntPtr hWnd, string lpText, string lpCaption, uint uType);
         public const uint MB_OK = 0x00000000;
         public const uint MB_ICONINFORMATION = 0x00000040;
         public const uint MB_ICONERROR = 0x00000010;
 
+        // ---- Значок в трее (замена System.Windows.Forms.NotifyIcon) ----
+        // ВАЖНО: структура должна повторять ПОЛНЫЙ актуальный Win32-layout
+        // NOTIFYICONDATAW (включая поля, которые мы не используем). Explorer
+        // сверяет cbSize с несколькими "известными" размерами (V1/V2/V3/полный)
+        // и если он не совпадает ни с одним из них — Shell_NotifyIcon просто
+        // молча ничего не делает (без исключения и без кода ошибки), и значок
+        // никогда не появляется. Урезанная структура (только до szTip) под это
+        // и попадает — исторический размер V1 считается по старому szTip[64],
+        // а не по нынешнему szTip[128], так что урезанный размер не совпадает
+        // ни с одной версией.
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         public struct NOTIFYICONDATA
         {
@@ -333,12 +350,18 @@ namespace KeyboardLayoutIndicator.Interop
         public const uint TPM_RIGHTBUTTON = 0x0002;
         public const uint TPM_RETURNCMD = 0x0100;
 
+        // ---- Извлечение собственной иконки процесса (надёжнее, чем грузить
+        //      по "жёсткому" числовому ID ресурса через LoadImage — точный ID,
+        //      который тулчейн присваивает иконке из <ApplicationIcon>, не
+        //      документирован и негарантирован; ExtractIconEx же просто берёт
+        //      первую по счёту группу иконок в модуле, что всегда корректно). ----
         [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern uint ExtractIconEx(string lpszFile, int nIconIndex, IntPtr[]? phiconLarge, IntPtr[]? phiconSmall, uint nIcons);
 
         [DllImport("user32.dll")]
         public static extern bool DestroyIcon(IntPtr hIcon);
 
+        // ---- Размеры виртуального экрана (замена SystemInformation.VirtualScreen) ----
         [DllImport("user32.dll")]
         public static extern int GetSystemMetrics(int nIndex);
         public const int SM_XVIRTUALSCREEN = 76;
@@ -346,6 +369,14 @@ namespace KeyboardLayoutIndicator.Interop
         public const int SM_CXVIRTUALSCREEN = 78;
         public const int SM_CYVIRTUALSCREEN = 79;
 
+        // ---- Звук (замена System.Media.SoundPlayer) ----
+        // Для SND_MEMORY + SND_ASYNC воспроизведение продолжается уже ПОСЛЕ
+        // возврата из PlaySound, поэтому передавать управляемый byte[] в этот
+        // P/Invoke нельзя (маршалинг снимает pin сразу после возврата вызова,
+        // а Windows будет читать буфер ещё некоторое время после этого).
+        // Вызывающий код обязан сам держать буфер закреплённым (GCHandle.Alloc
+        // с GCHandleType.Pinned) на всё время возможного асинхронного проигрывания
+        // и передавать сюда указатель на закреплённую память.
         [DllImport("winmm.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         public static extern bool PlaySound(IntPtr pszSoundPtr, IntPtr hmod, uint fdwSound);
         public const uint SND_MEMORY = 0x0004;
@@ -356,6 +387,8 @@ namespace KeyboardLayoutIndicator.Interop
         public static extern bool PlaySound(string? pszSound, IntPtr hmod, uint fdwSound);
         public const uint SND_FILENAME = 0x00020000;
 
+        // ---- LCID -> имя локали (замена System.Globalization.CultureInfo,
+        //      который на self-contained сборке тянет полный набор данных ICU) ----
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
         public static extern int LCIDToLocaleName(uint Locale, System.Text.StringBuilder lpName, int cchName, uint dwFlags);
     }

@@ -2,6 +2,14 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <!--
+      Раньше было net8.0-windows + UseWindowsForms=true. Приложение больше не
+      использует System.Windows.Forms / System.Drawing.Common / System.Media —
+      всё окно, трей, меню, звук и т.п. реализованы через прямые вызовы Win32
+      (см. Interop/NativeMethods.cs). Поэтому обычный net8.0 без "-windows":
+      это убирает зависимость от тяжёлого рантайма Microsoft.WindowsDesktop.App,
+      который при self-contained/publish был главной причиной раздутого exe.
+    -->
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -9,11 +17,24 @@
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
     <AssemblyName>KeyboardLayoutIndicator</AssemblyName>
     <RootNamespace>KeyboardLayoutIndicator</RootNamespace>
+    <!--
+      Раскладку раньше определяли через CultureInfo (System.Globalization),
+      что на self-contained сборке тянет полный набор данных ICU (десятки МБ).
+      Сейчас имя локали получаем напрямую через Win32 LCIDToLocaleName
+      (см. Keyboard/KeyboardLayoutWatcher.cs), поэтому инвариантный режим
+      глобализации приложению больше ничем не мешает.
+    -->
     <InvariantGlobalization>true</InvariantGlobalization>
     <GenerateAssemblyInfo>true</GenerateAssemblyInfo>
     <Product>Keyboard Layout Indicator</Product>
     <AssemblyTitle>Keyboard Layout Indicator</AssemblyTitle>
     <Version>1.0.0</Version>
+    <!--
+      PublishAot/PublishTrimmed влияют только на "dotnet publish" (в частности
+      требуют -r <rid>) и не затрагивают обычную сборку/отладку
+      (dotnet build, F5 в IDE). Точные команды публикации — в README.md,
+      раздел "Сборка".
+    -->
     <PublishAot>true</PublishAot>
     <PublishTrimmed>true</PublishTrimmed>
   </PropertyGroup>

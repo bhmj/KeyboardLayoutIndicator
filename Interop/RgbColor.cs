@@ -1,5 +1,10 @@
 namespace KeyboardLayoutIndicator.Interop
 {
+    /// <summary>
+    /// Простой RGB-цвет без альфы (её храним отдельно как opacity 0.0-1.0).
+    /// Заменяет System.Drawing.Color, чтобы не тянуть System.Drawing.Common
+    /// в бинарник ради одной структуры из трёх байт.
+    /// </summary>
     public readonly struct RgbColor
     {
         public readonly byte R;

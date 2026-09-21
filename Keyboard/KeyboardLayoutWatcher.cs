@@ -9,6 +9,13 @@ namespace KeyboardLayoutIndicator.Keyboard
     /// </summary>
     public sealed class KeyboardLayoutWatcher
     {
+        /// <summary>
+        /// Возвращает имя локали, соответствующее текущей раскладке активного окна,
+        /// например "en-US" или "ru-RU". Получаем его напрямую через Win32
+        /// LCIDToLocaleName, а не через System.Globalization.CultureInfo — это
+        /// не тянет за собой данные ICU (что критично для маленького self-contained
+        /// бинарника при InvariantGlobalization).
+        /// </summary>
         public string GetCurrentLayoutName()
         {
             IntPtr hwnd = NativeMethods.GetForegroundWindow();
