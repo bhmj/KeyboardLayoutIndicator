@@ -18,6 +18,22 @@ namespace KeyboardLayoutIndicator.Interop
         public const byte AC_SRC_OVER = 0x00;
         public const byte AC_SRC_ALPHA = 0x01;
 
+        // ---- Z-order (переустановка "поверх всех" после эксклюзивного fullscreen) ----
+        // Когда эксклюзивное full-screen приложение (игра со сменой видеорежима)
+        // завершает работу, Windows может молча "вытолкнуть" уже существующие
+        // topmost-окна из topmost-полосы вниз, в обычный z-order — при этом бит
+        // WS_EX_TOPMOST у окна остаётся выставленным, IsWindowVisible/GetWindowLong
+        // ничего не покажут, а окно просто перестаёт быть видно поверх других.
+        // Единственный надёжный способ вернуть окно наверх — периодически заново
+        // просить об этом SetWindowPos(HWND_TOPMOST), что и делает ShowOverlay().
+        public static readonly IntPtr HWND_TOPMOST = new(-1);
+        public const uint SWP_NOSIZE = 0x0001;
+        public const uint SWP_NOMOVE = 0x0002;
+        public const uint SWP_NOACTIVATE = 0x0010;
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
         {

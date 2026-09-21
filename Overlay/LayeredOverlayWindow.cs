@@ -127,8 +127,19 @@ namespace KeyboardLayoutIndicator.Overlay
         public void ShowOverlay()
         {
             if (_hwnd == IntPtr.Zero) return;
+
             if (!NativeMethods.IsWindowVisible(_hwnd))
                 NativeMethods.ShowWindow(_hwnd, SW_SHOWNOACTIVATE);
+
+            // Переустанавливаем окно в topmost-полосу при каждом показе (это
+            // дёшево — не двигает и не меняет размер окна, SWP_NOMOVE|SWP_NOSIZE).
+            // Без этого после закрытия эксклюзивного fullscreen-приложения (игры
+            // со сменой видеорежима) оверлей остаётся с флагом WS_EX_TOPMOST, но
+            // фактически проваливается под обычные окна — см. комментарий у
+            // HWND_TOPMOST в NativeMethods.cs.
+            NativeMethods.SetWindowPos(
+                _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
         }
 
         public void HideOverlay()
