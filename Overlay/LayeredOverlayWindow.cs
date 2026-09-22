@@ -70,6 +70,20 @@ namespace KeyboardLayoutIndicator.Overlay
         {
             if (_hwnd == IntPtr.Zero) return;
 
+            // Намеренно делаем окно на 1 пиксель ниже, чем монитор(ы), а не
+            // ровно по их границе. Если topmost-окно по размеру в точности
+            // совпадает с монитором (или полностью его перекрывает), Windows
+            // считает это "полноэкранным приложением" (тот же приём, которым
+            // сама программа определяет fullscreen — см. coversMonitor в
+            // FullscreenDetector) и на это время прячет панель задач под
+            // обычные окна — из-за этого все окна, перекрывавшие таскбар,
+            // "всплывали" над ним, пока индикатор был показан. Обрезав нижнюю
+            // строку пикселей, мы гарантированно не покрываем монитор целиком,
+            // и это срабатывание больше не происходит; потеря одной строки
+            // пикселей у самого низа экрана незаметна глазу.
+            int drawWidth = bounds.Width;
+            int drawHeight = Math.Max(1, bounds.Height - 1);
+
             IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
             IntPtr memDc = IntPtr.Zero;
             IntPtr hBitmap = IntPtr.Zero;
@@ -84,8 +98,8 @@ namespace KeyboardLayoutIndicator.Overlay
                     bmiHeader = new NativeMethods.BITMAPINFOHEADER
                     {
                         biSize = (uint)Marshal.SizeOf<NativeMethods.BITMAPINFOHEADER>(),
-                        biWidth = bounds.Width,
-                        biHeight = -bounds.Height, // отрицательная высота = top-down DIB
+                        biWidth = drawWidth,
+                        biHeight = -drawHeight, // отрицательная высота = top-down DIB
                         biPlanes = 1,
                         biBitCount = 32,
                         biCompression = 0 // BI_RGB
@@ -96,12 +110,15 @@ namespace KeyboardLayoutIndicator.Overlay
                 if (hBitmap == IntPtr.Zero || bits == IntPtr.Zero)
                     return;
 
-                Marshal.Copy(bgraPremultiplied, 0, bits, bgraPremultiplied.Length);
+                // Буфер построен на полную высоту bounds.Height (top-down), поэтому
+                // здесь просто берём его первые drawHeight строк, отбрасывая самую
+                // нижнюю — само по себе взятие среза, а не изменение содержимого.
+                Marshal.Copy(bgraPremultiplied, 0, bits, drawWidth * drawHeight * 4);
 
                 oldObj = NativeMethods.SelectObject(memDc, hBitmap);
 
                 var srcPos = new NativeMethods.POINT(0, 0);
-                var size = new NativeMethods.SIZE(bounds.Width, bounds.Height);
+                var size = new NativeMethods.SIZE(drawWidth, drawHeight);
                 var dstPos = new NativeMethods.POINT(bounds.Left, bounds.Top);
                 var blend = new NativeMethods.BLENDFUNCTION
                 {
@@ -138,17 +155,16 @@ namespace KeyboardLayoutIndicator.Overlay
             // фактически проваливается под обычные окна — см. комментарий у
             // HWND_TOPMOST в NativeMethods.cs.
             //
-            // Вставляем окно не абсолютным HWND_TOPMOST, а сразу ЗА панелью задач
-            // (Shell_TrayWnd), если её удалось найти. Причина: наш оверлей занимает
-            // весь виртуальный экран, и если явно попросить поставить его САМЫМ
-            // верхним topmost-окном (перед панелью задач), Explorer иногда решает,
-            // что это полноэкранное приложение, и на время прячет панель задач
-            // под обычные окна.
-            IntPtr insertAfter = NativeMethods.FindWindow("Shell_TrayWnd", null);
-            if (insertAfter == IntPtr.Zero) insertAfter = NativeMethods.HWND_TOPMOST;
-
+            // ВАЖНО: HWND_INSERTAFTER здесь обязан быть либо HWND_TOPMOST, либо
+            // HWND_NOTOPMOST/HWND_TOP/HWND_BOTTOM — если передать сюда handle
+            // обычного (не topmost) окна, например панели задач, Windows не
+            // просто переставит окно в очереди, а СНИМЕТ у него topmost-статус
+            // (задокументированное поведение SetWindowPos), и оверлей тут же
+            // проваливается под обычные окна. Причина глюка с "всплытием" окон
+            // над таскбаром была не в этом вызове, а в том, что оверлей по
+            // размеру совпадал с монитором целиком — исправлено в SetPixels().
             NativeMethods.SetWindowPos(
-                _hwnd, insertAfter, 0, 0, 0, 0,
+                _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
         }
 
