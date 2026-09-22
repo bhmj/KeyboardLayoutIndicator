@@ -137,8 +137,18 @@ namespace KeyboardLayoutIndicator.Overlay
             // со сменой видеорежима) оверлей остаётся с флагом WS_EX_TOPMOST, но
             // фактически проваливается под обычные окна — см. комментарий у
             // HWND_TOPMOST в NativeMethods.cs.
+            //
+            // Вставляем окно не абсолютным HWND_TOPMOST, а сразу ЗА панелью задач
+            // (Shell_TrayWnd), если её удалось найти. Причина: наш оверлей занимает
+            // весь виртуальный экран, и если явно попросить поставить его САМЫМ
+            // верхним topmost-окном (перед панелью задач), Explorer иногда решает,
+            // что это полноэкранное приложение, и на время прячет панель задач
+            // под обычные окна.
+            IntPtr insertAfter = NativeMethods.FindWindow("Shell_TrayWnd", null);
+            if (insertAfter == IntPtr.Zero) insertAfter = NativeMethods.HWND_TOPMOST;
+
             NativeMethods.SetWindowPos(
-                _hwnd, NativeMethods.HWND_TOPMOST, 0, 0, 0, 0,
+                _hwnd, insertAfter, 0, 0, 0, 0,
                 NativeMethods.SWP_NOMOVE | NativeMethods.SWP_NOSIZE | NativeMethods.SWP_NOACTIVATE);
         }
 

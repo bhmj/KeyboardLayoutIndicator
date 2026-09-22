@@ -34,6 +34,12 @@ namespace KeyboardLayoutIndicator.Interop
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+        // Используется, чтобы найти окно панели задач (см. комментарий в
+        // ShowOverlay о том, зачем вставлять оверлей именно за ним, а не
+        // абсолютным HWND_TOPMOST).
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern IntPtr FindWindow(string? lpClassName, string? lpWindowName);
+
         [StructLayout(LayoutKind.Sequential)]
         public struct POINT
         {
